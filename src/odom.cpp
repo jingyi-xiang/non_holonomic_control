@@ -32,12 +32,12 @@ double localChangeInY = 0;
 double globalChangeInX = 0;
 double globalChangeInY = 0;
 
-double currentX = 0;
-double currentY = 0;
+double currentX = 2;
+double currentY = 1;
 double previousX = currentX;
 double previousY = currentY;
 
-double initHeading = 90;
+double initHeading = 180;
 
 double sideToCenterDistance = 4.0/12.0;
 

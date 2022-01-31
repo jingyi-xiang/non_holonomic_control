@@ -214,10 +214,10 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
 
     // when the last found index equals the index of the second last point in path, the robot can still find intersection
     // but it's time to enter stopping condition
-    if (lastFoundIndex == (path.size()-numOfSeg-2))
-    {
-      endNear = true;
-    }
+    // if (lastFoundIndex >= (path.size()-numOfSeg-2))
+    // {
+    //   endNear = true;
+    // }
 
     // initialize lin error
     double linVel = Kp_lin * remainingDis;
@@ -302,11 +302,11 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
                 }
               }
               // only exit the loop if the sol pt found is closer to the next point in path than the current pos
-              if (sqrt(pow(nextToFollow_x-path[i+1][0], 2) + pow(nextToFollow_y-path[i+1][1], 2)) < sqrt(pow(currentX-path[i+1][0], 2) + pow(currentY-path[i+1][1], 2))) {
-                break;
-              } else {
-                lastFoundIndex = i + 1;
-              }
+              // if (sqrt(pow(nextToFollow_x-path[i+1][0], 2) + pow(nextToFollow_y-path[i+1][1], 2)) < sqrt(pow(currentX-path[i+1][0], 2) + pow(currentY-path[i+1][1], 2))) {
+              //   break;
+              // } else {
+              //   lastFoundIndex = i + 1;
+              // }
             }
           } else {
             foundIntersect = false;
@@ -314,7 +314,22 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
             nextToFollow_y = path[lastFoundIndex][1];
           }
         }
+
+        if (foundIntersect && sqrt(pow(nextToFollow_x-path[i+1][0], 2) + pow(nextToFollow_y-path[i+1][1], 2)) < sqrt(pow(currentX-path[i+1][0], 2) + pow(currentY-path[i+1][1], 2))) {
+          break;
+        } else {
+          lastFoundIndex = i + 1;
+        }
       }
+
+      // temp modification, for fun
+      if (lastFoundIndex >= path.size()-numOfSeg-2)
+      {
+        lastFoundIndex = 0;
+        nextToFollow_x = path[lastFoundIndex][0];
+        nextToFollow_y = path[lastFoundIndex][1];
+      }
+      std::cout << lastFoundIndex << std::endl;
 
       // start calculating turn error
       absTargetAngle = atan2 ((nextToFollow_y-currentY), (nextToFollow_x-currentX)) *180/M_PI;
