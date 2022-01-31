@@ -60,18 +60,20 @@ double atan_vel_func (double total_distance, double total_remaining, double maxV
   return correspondingVel;
 }
 
-void moveToRefPose (double targetX, double targetY, double targetHeading, double linMax, double turnMax, double Kp_lin, double Kp_turn, double Kd_turn, double r)
+void moveToRefPose (double targetX, double targetY, double targetHeading, double linMax, double turnMax, double Kp_lin, double Kp_turn, double Kp_predict, double r)
 {
   // initialization
   double startingVel = 0;
   double tolerance_end = 0.15;
-  double maxTotalVel = 50;
+  double maxTotalVel = 100;
   bool targetReached = false;
   bool nearEnd = false;
 
+  double Kd_turn = 1;
+  double stop_counter = 0;
+
   // looking ahead
-  double Kp_predict = 4;
-  double prevVel;
+  double prevVel = startingVel;
 
   double prevTurnError = 0;
   // double total_turnAngle = 90;  // temp
@@ -81,6 +83,7 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
   // double tolerance = 0.5;
   // double intermediateX = 0.75; // targetX - intermediateR*cos(targetHeading *M_PI/180);
   // double intermediateY = 1; // targetY - intermediateR*sin(targetHeading *M_PI/180);
+  Brain.Screen.clearScreen();
 
   do 
   {
@@ -91,7 +94,7 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
     // trying to look ahead
     //                     rpm   /s     cir        ft
     double maxLinVelFeet = 600 / 60 * M_PI * 2.75 /12;
-    double stepDis = prevVel * maxLinVelFeet;  // percentage * maxSpeed
+    double stepDis = prevVel/100 * maxLinVelFeet * 10/1000 * Kp_predict;  // percentage * maxSpeed
     double predictedX = currentX + stepDis * cos (currentHeading * M_PI/180);
     double predictedY = currentY + stepDis * sin (currentHeading * M_PI/180);
 
@@ -104,6 +107,7 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
     }
 
     double D = sqrt(pow((targetX-currentX), 2) + pow((targetY-currentY), 2));
+    // double D = sqrt(pow((targetX-predictedX), 2) + pow((targetY-predictedY), 2));
     double alpha = findMinAngle(absTargetAngle, targetHeading);
     double beta = atan(r/D) *180/M_PI;
 
@@ -154,9 +158,20 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
     // double turnError = findMinAngle(absTargetAngle, currentHeading);
     // intermediate point ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    // keep track of relative angle to target
+    // double botToTargetLineAngle = atan2 ((targetY-predictedY), (targetX-predictedX)) *180/M_PI;
+    double botToTargetLineAngle = atan2 ((targetY-currentY), (targetX-currentX)) *180/M_PI;
+
+    if (botToTargetLineAngle < 0)
+    {
+      botToTargetLineAngle += 360;
+    }
+
     // vel calculations
-    startingVel += 0.2;
-    double linVel = Kp_lin * linearError; // * sgn(cos(turnError *M_PI/180));  // in pct
+    startingVel += 1;
+    double linVel = Kp_lin * linearError * sgn(cos(turnError *M_PI/180));  // in pct
+    // linVel = Kp_lin * linearError * sgn(cos(findMinAngle(targetHeading, botToTargetLineAngle) *M_PI/180)); // this wasnt here
+
     if (linVel > startingVel)
     {
       linVel = startingVel;
@@ -165,24 +180,45 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
     // where did this shit come from?
     // turnVel = Kp_turn * math.atan(math.tan(turnError *pi/180)) *180/pi  # in pct
     double turnVel = Kp_turn * turnError + Kd_turn * (turnError - prevTurnError);
+    // turnVel = Kp_turn * atan(tan(turnError *M_PI/180)) *180/M_PI; // this wasnt here
     // double turnVel = atan_vel_func(total_turnAngle, turnError, turnMax, Kp_turn);
 
     // if near end
-    if ((sqrt(pow((currentX-targetX), 2) + pow((currentY-targetY), 2)) < 0.5) && (fabs(errorTerm1) < 45))
+    if ((sqrt(pow((currentX-targetX), 2) + pow((currentY-targetY), 2)) < 0.2))
     {
       nearEnd = true;
     }
+
     if (nearEnd)
     {
-      linVel = Kp_lin * linearError * sgn(cos(turnError *M_PI/180));
+      std::cout << "near end" << std::endl;
+
+      linVel = Kp_lin * linearError * sgn(cos(findMinAngle(targetHeading, botToTargetLineAngle) *M_PI/180));
+      // linVel = Kp_lin * linearError * sgn(cos(botToTargetLineAngle *M_PI/180));
+
+      // linVel = 5;
+
       turnError = findMinAngle(targetHeading, currentHeading);
       turnVel = Kp_turn * atan(tan(turnError *M_PI/180)) *180/M_PI;
+      
+      turnVel = assignMinPower(turnVel, 2);
       // turnVel = atan_vel_func(total_turnAngle, turnError, turnMax, Kp_turn);
-    }
+      // if ((fabs(fabs(findMinAngle(botToTargetLineAngle, targetHeading)) - 90) <= 1) && (fabs(turnError) <= 1))
+      if ((fabs(turnError) <= 1) && nearEnd)
+      {
+        stop_counter += 1;
+      }
+      else 
+      {
+        stop_counter = 0;
+      }
 
-    if ((sqrt(pow((currentX-targetX), 2) + pow((currentY-targetY), 2)) < tolerance_end) && (fabs(turnError)<1))
-    {
-      targetReached = true;
+      if (stop_counter >= 10)
+      {
+        std::cout << "target reached" << std::endl;
+
+        targetReached = true;
+      }
     }
 
     // limit max vel
@@ -215,6 +251,16 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
     // update
     prevTurnError = turnError;
     prevVel = linVel;
+
+    std::cout << linVel <<std::endl;
+
+    Brain.Screen.printAt (10, 20, "current x = %1.2f", currentX);
+    Brain.Screen.printAt (10, 40, "current Y = %1.2f", currentY);
+    Brain.Screen.printAt (10, 60, "current heading = %1.2f", currentHeading);
+    Brain.Screen.printAt (10, 140, "turnError = %1.2f", turnError);
+    Brain.Screen.printAt (10, 160, "linVel = %1.2f", linVel);
+
+    wait (10, msec);
   }
   while (!targetReached);
   
