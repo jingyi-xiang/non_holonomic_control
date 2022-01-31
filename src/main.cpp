@@ -45,22 +45,22 @@ int main() {
   thread odom = thread(position_update);
 
   // moveToRefPose (double targetX, double targetY, double targetHeading, double linMax, double turnMax, double Kp_lin, double Kp_turn, double Kp_predict, double r)
-  moveToRefPose (0.5, 3, 90, 100, 100, 70, 1.6, 8, 0.5);
+  // moveToRefPose (0.5, 3, 90, 100, 100, 70, 1.6, 8, 0.5);
   std::vector<std::vector<double>> path 
   {
     {0, 0},
     {0, 1},
     {0, 2},
     {0, 3},
-    {1, 3},
-    {1, 2},
-    {1, 1},
-    {1, 0},
+    {2, 3},
+    {2, 2},
+    {2, 1},
+    {2, 0},
     {0, 0},
   };
 
   // void followRefPath (const std::vector<std::vector<double>> &path, double targetAngle, double maxTotalVel, double linMax, double turnMax, double Kp_lin, double Kp_turn, double tune_turn, int numOfSeg)
-  // followRefPath (path, 270, 60, 50, 70, 30, 0.4, 1, 0);
+  followRefPath (path, 180, 100, 100, 100, 70, 1.6, 1, 0);
 
   Brain.Screen.clearScreen();
   while (1)

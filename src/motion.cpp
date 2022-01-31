@@ -126,7 +126,7 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
       
       assignMinPower(turnVel, 5);
 
-      if ((fabs(turnError) <= 1) && nearEnd) {
+      if ((fabs(turnError) <= 1) && (linearError <= 0.05)) {
         stop_counter += 1;
       } else {
         stop_counter = 0;
@@ -152,8 +152,7 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
     }
 
     // prioritize turning
-    if ((linVel + fabs(turnVel)) > maxTotalVel)
-    {
+    if ((linVel + fabs(turnVel)) > maxTotalVel) {
       linVel = maxTotalVel - fabs(turnVel);
     }
 
@@ -182,7 +181,7 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
   // initialization
   double robotWidth = 13.5/12; // feet
   int lastFoundIndex = 0;
-  double lookAheadDis = 1;
+  double lookAheadDis = 0.7;
   bool endNear = false;
   bool targetReached = false;
 
@@ -193,31 +192,24 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
     double nextToFollow_y = path[lastFoundIndex][1];
 
     // calculate remaining distance
-    double remainingDis = sqrt (pow(currentX-path[path.size()-numOfSeg-2][0], 2) + pow(currentY-path[path.size()-numOfSeg-2][1], 2));
-    if (lastFoundIndex < path.size()-numOfSeg-2)
-    {
-      remainingDis = sqrt (pow(currentX-path[lastFoundIndex+1][0], 2) + pow(currentY-path[lastFoundIndex+1][1], 2));
-      for (int i = lastFoundIndex+1; i < path.size()-numOfSeg-2; i ++)
-      {
-        remainingDis += sqrt (pow(path[i][0]-path[i+1][0], 2) + pow(path[i][1]-path[i+1][1], 2));
-      }
+    // there is **NO** buffer point in this implementation
+    // true path len - 1 = last point; true path len - 2 = last reachable point
+    double remainingDis = sqrt (pow(currentX-path[lastFoundIndex+1][0], 2) + pow(currentY-path[lastFoundIndex+1][1], 2));
+    for (int i = lastFoundIndex+1; i < path.size()-numOfSeg-1; i ++) {
+      remainingDis += sqrt (pow(path[i][0]-path[i+1][0], 2) + pow(path[i][1]-path[i+1][1], 2));
     }
 
-    // there will be a 'buffer point' that is lookAheadDis away from the actual last point in path
-    // when the last found index equals the index of the actual last point in path, the robot can still find intersection
+    // when the last found index equals the index of the second last point in path, the robot can still find intersection
     // but it's time to enter stopping condition
-    if (lastFoundIndex == (path.size()-numOfSeg-3))
+    if (lastFoundIndex == (path.size()-numOfSeg-2))
     {
-      std::cout<<"end near"<<std::endl;
       endNear = true;
     }
 
-    std::cout<<lastFoundIndex<<" "<<path.size()-numOfSeg-2<<std::endl;
-
     // initialize lin error
     double linVel = Kp_lin * remainingDis;
-    if (linVel > linMax)
-    {
+    // linVel can only be positive
+    if (linVel > linMax) {
       linVel = linMax;
     }
 
@@ -226,19 +218,15 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
     double turnError = findMinAngle (absTargetAngle, currentHeading);
     double turnVel = Kp_turn * turnError;
 
-    // if close enough to the target point
-    if (endNear)
-    {
-      std::cout<<"end near"<<std::endl;
-      moveToRefPose (path[path.size()-numOfSeg-2][0], path[path.size()-numOfSeg-2][1], targetAngle, linMax, turnMax, Kp_lin, Kp_turn, 1, 0.8);
+    // if close enough to the target point, call move to ref point
+    if (endNear) {
+      moveToRefPose (path[path.size()-numOfSeg-1][0], path[path.size()-numOfSeg-1][1], targetAngle, linMax, turnMax, Kp_lin, Kp_turn, 0, 0.6);
       targetReached = true;
     }
     // when not near the end, follow pure pursuit procedure
-    else 
-    {
+    else {
       // loop through path to find intersection
-      for (int i = startIndex; i < (path.size()-numOfSeg-1); i ++)
-      {
+      for (int i = startIndex; i <= (path.size()-numOfSeg-2); i ++) {
         double x1 = path[i][0] - currentX;
         double y1 = path[i][1] - currentY;
         double x2 = path[i+1][0] - currentX;
@@ -249,8 +237,7 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
         double D = x1*y2 - x2*y1;
         double discriminant = pow(lookAheadDis, 2) * pow(dr, 2) - pow(D, 2);
 
-        if (discriminant >= 0)
-        {
+        if (discriminant >= 0) {
           double sol_x1 = (D * dy + sgn(dy) * dx * sqrt(discriminant)) / pow(dr, 2);
           double sol_x2 = (D * dy - sgn(dy) * dx * sqrt(discriminant)) / pow(dr, 2);
           double sol_y1 = (- D * dx + fabs(dy) * sqrt(discriminant)) / pow(dr, 2);
@@ -269,64 +256,46 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
           // check if solutions are in range
           // if (((minX <= sol_pt1_x <= maxX) && (minY <= sol_pt1_y <= maxY)) || ((minX <= sol_pt2_x <= maxX) && (minY <= sol_pt2_y <= maxY)))
           if ((((minX <= sol_pt1_x) && (sol_pt1_x <= maxX)) && ((minY <= sol_pt1_y) && (sol_pt1_y <= maxY)))
-          || (((minX <= sol_pt2_x) && (sol_pt2_x <= maxX)) && ((minY <= sol_pt2_y) && (sol_pt2_y <= maxY))))
-          {
+          || (((minX <= sol_pt2_x) && (sol_pt2_x <= maxX)) && ((minY <= sol_pt2_y) && (sol_pt2_y <= maxY)))) {
             foundIntersect = true;
             // if the point is too far away from the last point found, it's probably cutting corners
-            if (i - lastFoundIndex > 1)
-            {
+            if (i - lastFoundIndex > 1) {
               lastFoundIndex += 1;
               nextToFollow_x = path[lastFoundIndex][0];
               nextToFollow_y = path[lastFoundIndex][1];
-            }
-            else
-            {
+            } else {
               // if both solutions are in range, determine which one is better
               // if (((minX <= sol_pt1_x <= maxX) && (minY <= sol_pt1_y <= maxY)) && ((minX <= sol_pt2_x <= maxX) && (minY <= sol_pt2_y <= maxY)))
               if ((((minX <= sol_pt1_x) && (sol_pt1_x <= maxX)) && ((minY <= sol_pt1_y) && (sol_pt1_y <= maxY)))
-              && (((minX <= sol_pt2_x) && (sol_pt2_x <= maxX)) && ((minY <= sol_pt2_y) && (sol_pt2_y <= maxY))))
-              {
+              && (((minX <= sol_pt2_x) && (sol_pt2_x <= maxX)) && ((minY <= sol_pt2_y) && (sol_pt2_y <= maxY)))) {
                 lastFoundIndex = i;
                 // take the intersection closer to the next point in path
-                if (sqrt(pow(sol_pt1_x-path[i+1][0], 2) + pow(sol_pt1_y-path[i+1][1], 2)) < sqrt(pow(sol_pt2_x-path[i+1][0], 2) + pow(sol_pt2_y-path[i+1][1], 2)))
-                {
+                if (sqrt(pow(sol_pt1_x-path[i+1][0], 2) + pow(sol_pt1_y-path[i+1][1], 2)) < sqrt(pow(sol_pt2_x-path[i+1][0], 2) + pow(sol_pt2_y-path[i+1][1], 2))) {
                   nextToFollow_x = sol_pt1_x;
                   nextToFollow_y = sol_pt1_y;
-                }
-                else 
-                {
+                } else {
                   nextToFollow_x = sol_pt2_x;
                   nextToFollow_y = sol_pt2_y;
                 }
-              }
-              // if only one is in range, take that one
-              else 
-              {
+              } else {
+                // if only one is in range, take that one
                 // if ((minX <= sol_pt1_x <= maxX) && (minY <= sol_pt1_y <=maxY))
-                if (((minX <= sol_pt1_x) && (sol_pt1_x <= maxX)) && ((minY <= sol_pt1_y) && (sol_pt1_y <= maxY)))
-                {
+                if (((minX <= sol_pt1_x) && (sol_pt1_x <= maxX)) && ((minY <= sol_pt1_y) && (sol_pt1_y <= maxY))) {
                   nextToFollow_x = sol_pt1_x;
                   nextToFollow_y = sol_pt1_y;
-                }
-                else 
-                {
+                } else {
                   nextToFollow_x = sol_pt2_x;
                   nextToFollow_y = sol_pt2_y;
                 }
               }
               // only exit the loop if the sol pt found is closer to the next point in path than the current pos
-              if (sqrt(pow(nextToFollow_x-path[i+1][0], 2) + pow(nextToFollow_y-path[i+1][1], 2)) < sqrt(pow(currentX-path[i+1][0], 2) + pow(currentY-path[i+1][1], 2)))
-              {
+              if (sqrt(pow(nextToFollow_x-path[i+1][0], 2) + pow(nextToFollow_y-path[i+1][1], 2)) < sqrt(pow(currentX-path[i+1][0], 2) + pow(currentY-path[i+1][1], 2))) {
                 break;
-              }
-              else 
-              {
+              } else {
                 lastFoundIndex = i + 1;
               }
             }
-          }
-          else 
-          {
+          } else {
             foundIntersect = false;
             nextToFollow_x = path[lastFoundIndex][0];
             nextToFollow_y = path[lastFoundIndex][1];
@@ -334,12 +303,11 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
         }
       }
 
+      // start calculating turn error
       absTargetAngle = atan2 ((nextToFollow_y-currentY), (nextToFollow_x-currentX)) *180/M_PI;
-      if (absTargetAngle < 0)
-      {
+      if (absTargetAngle < 0) {
         absTargetAngle += 360;
       }
-      // calculate heading error
       turnError = findMinAngle (absTargetAngle, currentHeading);
 
       // // old method
@@ -364,21 +332,16 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
       // new method
       double R = lookAheadDis / (2*sin(turnError *M_PI/180));
       turnVel = robotWidth/(2*R) * linVel * tune_turn;
-      if (fabs(turnVel) > turnMax)
-      {
+      if (fabs(turnVel) > turnMax) {
         if (turnVel > turnMax) {turnVel = turnMax;}
         if (turnVel < -turnMax) {turnVel = -turnMax;}
       }
       // physical constraint
-      if ((linVel + fabs(turnVel)) > maxTotalVel)
-      {
+      if ((linVel + fabs(turnVel)) > maxTotalVel) {
         linVel = maxTotalVel / (fabs(robotWidth / (2*R))*tune_turn + 1);
-        if (turnVel >= 0)
-        {
+        if (turnVel >= 0) {
           turnVel = maxTotalVel - linVel;
-        }
-        else
-        {
+        } else {
           turnVel = - (maxTotalVel - linVel);
         }
       }
@@ -393,6 +356,7 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
     Brain.Screen.printAt (10, 120, "next y to follow = %1.2f", nextToFollow_y);
     Brain.Screen.printAt (10, 140, "turnError = %1.2f", turnError);
     Brain.Screen.printAt (10, 160, "remaining dis = %1.2f", remainingDis);
-  }
-  while (!targetReached);
+
+    wait (10, msec);
+  } while (!targetReached);
 }
