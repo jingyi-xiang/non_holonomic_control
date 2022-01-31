@@ -25,6 +25,7 @@
 #include "vector"
 #include "motion.h"
 #include "odom.h"
+#include "screen_print.h"
 
 using namespace vex;
 
@@ -44,29 +45,33 @@ int main() {
 
   thread odom = thread(position_update);
 
+  // screen graphing initialization
+  draw_background();
+
   // moveToRefPose (double targetX, double targetY, double targetHeading, double linMax, double turnMax, double Kp_lin, double Kp_turn, double Kp_predict, double r)
   // moveToRefPose (0.5, 3, 90, 100, 100, 70, 1.6, 8, 0.5);
   std::vector<std::vector<double>> path 
   {
-    {0, 0},
-    {0, 1},
-    {0, 2},
-    {0, 3},
-    {2, 3},
-    {2, 2},
-    {2, 1},
-    {2, 0},
-    {0, 0},
+    {1, 1},
+    {1, 2},
+    {1, 3},
+    {1, 4},
+    {3, 4},
+    {3, 3},
+    {3, 2},
+    {3, 1},
+    {1, 1},
   };
 
-  // void followRefPath (const std::vector<std::vector<double>> &path, double targetAngle, double maxTotalVel, double linMax, double turnMax, double Kp_lin, double Kp_turn, double tune_turn, int numOfSeg)
-  followRefPath (path, 180, 100, 100, 100, 70, 1.6, 1, 0);
+  draw_path (path);
 
-  Brain.Screen.clearScreen();
+  // void followRefPath (const std::vector<std::vector<double>> &path, double targetAngle, double maxTotalVel, double linMax, double turnMax, double Kp_lin, double Kp_turn, double tune_turn, int numOfSeg)
+  followRefPath (path, 180, 100, 100, 100, 75, 1.5, 1.2, 0);
+  draw_path (path);
+
   while (1)
   {
-    driverControl();
-    manual_tune();
+    wait (10, msec);
   }
   
 }

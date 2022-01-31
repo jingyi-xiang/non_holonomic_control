@@ -3,6 +3,7 @@
 #include "iostream"
 #include "vector"
 #include "odom.h"
+#include "screen_print.h"
 
 using namespace vex;
 
@@ -38,9 +39,12 @@ void assignMinPower (double &vel, double minVel) {
   }
 }
 
-void moveToRefPose (double targetX, double targetY, double targetHeading, double linMax, double turnMax, double Kp_lin, double Kp_turn, double Kp_predict, double r) {
+void moveToRefPose (double targetX, double targetY, double targetHeading, double linMax, double turnMax, double Kp_lin, double Kp_turn, double Kp_predict, double r, double startingVel = 0) {
+  // draw starting/ending point
+  draw_point(currentX, currentY, 5, blue);
+  draw_point(targetX, targetY, 5, green);
+  
   // initialization
-  double startingVel = 0;
   double tolerance_end = 0.15;
   double maxTotalVel = 100;
   bool targetReached = false;
@@ -51,9 +55,10 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
   // looking ahead
   double prevLinError = sqrt(pow((targetX-currentX), 2) + pow((targetY-currentY), 2));
 
-  Brain.Screen.clearScreen();
-
   do {
+    // draw current position
+    draw_point(currentX, currentY, 3, orange);
+
     // get lin error
     double linearError = sqrt(pow((targetX-currentX), 2) + pow((targetY-currentY), 2));
 
@@ -162,11 +167,11 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
     // update
     prevLinError = linearError;
 
-    Brain.Screen.printAt (10, 20, "current x = %1.2f", currentX);
-    Brain.Screen.printAt (10, 40, "current Y = %1.2f", currentY);
-    Brain.Screen.printAt (10, 60, "current heading = %1.2f", currentHeading);
-    Brain.Screen.printAt (10, 140, "turnError = %1.2f", turnError);
-    Brain.Screen.printAt (10, 160, "linVel = %1.2f", linVel);
+    Brain.Screen.printAt (10, 20, "x = %1.2f", currentX);
+    Brain.Screen.printAt (10, 40, "Y = %1.2f", currentY);
+    Brain.Screen.printAt (10, 60, "phi = %1.2f", currentHeading);
+    // Brain.Screen.printAt (10, 140, "turnError = %1.2f", turnError);
+    // Brain.Screen.printAt (10, 160, "linVel = %1.2f", linVel);
 
     wait (10, msec);
   } while (!targetReached);
@@ -185,7 +190,15 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
   bool endNear = false;
   bool targetReached = false;
 
+  // draw starting/ending point
+  draw_point(path[0][0], path[0][1], 5, blue);
+  draw_point(path[path.size()-numOfSeg-1][0], path[path.size()-numOfSeg-1][1], 5, green);
+
   do {
+    // draw current position
+    draw_point(currentX, currentY, 3, orange);
+    draw_path (path);
+
     bool foundIntersect = false;
     int startIndex = lastFoundIndex;
     double nextToFollow_x = path[lastFoundIndex][0];
@@ -220,7 +233,7 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
 
     // if close enough to the target point, call move to ref point
     if (endNear) {
-      moveToRefPose (path[path.size()-numOfSeg-1][0], path[path.size()-numOfSeg-1][1], targetAngle, linMax, turnMax, Kp_lin, Kp_turn, 0, 0.6);
+      moveToRefPose (path[path.size()-numOfSeg-1][0], path[path.size()-numOfSeg-1][1], targetAngle, linMax, turnMax, Kp_lin, Kp_turn, 0, 0.6, linVel);
       targetReached = true;
     }
     // when not near the end, follow pure pursuit procedure
@@ -310,52 +323,52 @@ void followRefPath (const std::vector<std::vector<double>> &path, double targetA
       }
       turnError = findMinAngle (absTargetAngle, currentHeading);
 
-      // // old method
-      // turnVel = Kp_turn * turnError;
-      // if (fabs(turnVel) > turnMax)
-      // {
-      //   if (turnVel > 0)
-      //   {
-      //     turnVel = turnMax;
-      //   }
-      //   else
-      //   {
-      //     turnVel = -turnMax;
-      //   }
-      // }
-      // // prioritize turning
-      // if ((linVel + fabs(turnVel)) > maxTotalVel)
-      // {
-      //   linVel = maxTotalVel - fabs(turnVel);
-      // }
-
-      // new method
-      double R = lookAheadDis / (2*sin(turnError *M_PI/180));
-      turnVel = robotWidth/(2*R) * linVel * tune_turn;
-      if (fabs(turnVel) > turnMax) {
-        if (turnVel > turnMax) {turnVel = turnMax;}
-        if (turnVel < -turnMax) {turnVel = -turnMax;}
-      }
-      // physical constraint
-      if ((linVel + fabs(turnVel)) > maxTotalVel) {
-        linVel = maxTotalVel / (fabs(robotWidth / (2*R))*tune_turn + 1);
-        if (turnVel >= 0) {
-          turnVel = maxTotalVel - linVel;
-        } else {
-          turnVel = - (maxTotalVel - linVel);
+      // old method
+      turnVel = Kp_turn * turnError;
+      if (fabs(turnVel) > turnMax)
+      {
+        if (turnVel > 0)
+        {
+          turnVel = turnMax;
+        }
+        else
+        {
+          turnVel = -turnMax;
         }
       }
+      // prioritize turning
+      if ((linVel + fabs(turnVel)) > maxTotalVel)
+      {
+        linVel = maxTotalVel - fabs(turnVel);
+      }
+
+      // // new method
+      // double R = lookAheadDis / (2*sin(turnError *M_PI/180));
+      // turnVel = robotWidth/(2*R) * linVel * tune_turn;
+      // if (fabs(turnVel) > turnMax) {
+      //   if (turnVel > turnMax) {turnVel = turnMax;}
+      //   if (turnVel < -turnMax) {turnVel = -turnMax;}
+      // }
+      // // physical constraint
+      // if ((linVel + fabs(turnVel)) > maxTotalVel) {
+      //   linVel = maxTotalVel / (fabs(robotWidth / (2*R))*tune_turn + 1);
+      //   if (turnVel >= 0) {
+      //     turnVel = maxTotalVel - linVel;
+      //   } else {
+      //     turnVel = - (maxTotalVel - linVel);
+      //   }
+      // }
 
       moveWithAssignedSpeed(linVel, turnVel);
     }
 
-    Brain.Screen.printAt (10, 20, "current x = %1.2f", currentX);
-    Brain.Screen.printAt (10, 40, "current Y = %1.2f", currentY);
-    Brain.Screen.printAt (10, 60, "current heading = %1.2f", currentHeading);
-    Brain.Screen.printAt (10, 100, "next x to follow = %1.2f", nextToFollow_x);
-    Brain.Screen.printAt (10, 120, "next y to follow = %1.2f", nextToFollow_y);
-    Brain.Screen.printAt (10, 140, "turnError = %1.2f", turnError);
-    Brain.Screen.printAt (10, 160, "remaining dis = %1.2f", remainingDis);
+    Brain.Screen.printAt (10, 20, "x = %1.2f", currentX);
+    Brain.Screen.printAt (10, 40, "Y = %1.2f", currentY);
+    Brain.Screen.printAt (10, 60, "phi = %1.2f", currentHeading);
+    // Brain.Screen.printAt (10, 100, "next x to follow = %1.2f", nextToFollow_x);
+    // Brain.Screen.printAt (10, 120, "next y to follow = %1.2f", nextToFollow_y);
+    // Brain.Screen.printAt (10, 140, "turnError = %1.2f", turnError);
+    // Brain.Screen.printAt (10, 160, "remaining dis = %1.2f", remainingDis);
 
     wait (10, msec);
   } while (!targetReached);
