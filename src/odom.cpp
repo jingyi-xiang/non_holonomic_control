@@ -39,6 +39,8 @@ double previousY = currentY;
 
 double initHeading = 90;
 
+double sideToCenterDistance = 4.0/12.0;
+
 // the inertial sensor reads slightly less than 1 for each degree
 double heading_correction (double currentRotation){
   double correctedHeading = fmod((currentRotation * scaleFactor_heading), 360) + initHeading;
@@ -59,7 +61,7 @@ void position_update (){
 
   wheelDiameter = wheelDiameter * scaleFactor;
 
-  encoderLeft.resetRotation();
+  // encoderLeft.resetRotation();
   encoderMiddle.resetPosition();
   encoderRight.resetRotation();
 
@@ -79,12 +81,12 @@ void position_update (){
     changeInHeading_rad = changeInHeading * pi / 180;
       
     // get current tracking wheel locations (in degrees)
-    currentLeft = encoderLeft.rotation(deg);
+    // currentLeft = encoderLeft.rotation(deg);
     currentRight = encoderRight.rotation(deg);
     currentBack = encoderMiddle.position(deg);
       
     // convert to distance unit (feet)
-    changeInLeft = ( currentLeft - previousLeft ) / 360 * pi * wheelDiameter / 12;
+    // changeInLeft = ( currentLeft - previousLeft ) / 360 * pi * wheelDiameter / 12;
     changeInRight = ( currentRight - previousRight ) / 360 * pi * wheelDiameter / 12;
     changeInBack = ( currentBack - previousBack ) / 360 * pi * wheelDiameter / 12;
       
@@ -95,7 +97,7 @@ void position_update (){
     }
     // compute local changes (local coordinate system)
     else {
-      localChangeInY = 2 * sin ( changeInHeading_rad / 2 ) * ( changeInLeft + changeInRight ) / 2 / changeInHeading_rad;
+      localChangeInY = 2 * sin ( changeInHeading_rad / 2 ) * ( changeInRight / changeInHeading_rad - sideToCenterDistance );
       // since back tracking wheel is not at center, need to offset it
       localChangeInX = 2 * sin ( changeInHeading_rad / 2 ) * ( changeInBack / changeInHeading_rad - backToCenterDistance );
     }
@@ -119,7 +121,7 @@ void position_update (){
       
     // store values
     previousHeading = currentHeading;
-    previousLeft = currentLeft;
+    // previousLeft = currentLeft;
     previousRight = currentRight;
     previousBack = currentBack;
     previousX = currentX;

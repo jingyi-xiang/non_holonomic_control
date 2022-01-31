@@ -22,46 +22,23 @@ void moveWithAssignedSpeed (double linVel, double turnVel)
   rightBack.spin(directionType::fwd, linVel+turnVel, velocityUnits::pct);
 }
 
-void groupStopHold (void)
+void groupStop (brakeType b)
 {
-  leftFront.stop(hold);
-  leftBack.stop(hold);
-  rightFront.stop(hold);
-  rightBack.stop(hold);
+  leftFront.stop (b);
+  leftBack.stop (b);
+  rightFront.stop (b);
+  rightBack.stop (b);
 }
 
-void groupStopCoast (void)
-{
-  leftFront.stop(coast);
-  leftBack.stop(coast);
-  rightFront.stop(coast);
-  rightBack.stop(coast);
-}
-
-double assignMinPower (double vel, double minVel)
-{
-  if (vel < 0)
-  {
-    return -minVel;
-  }
-  else 
-  {
-    return minVel;
+void assignMinPower (double &vel, double minVel) {
+  if (vel < 0) {
+    vel = -minVel;
+  } else {
+    vel = minVel;
   }
 }
 
-double atan_vel_func (double total_distance, double total_remaining, double maxVel, double tuning_constant)
-{
-  double correspondingVel = 0;
-  // vel = A * atan(tuning_const * (x - total distance))
-  double A = maxVel / atan(-tuning_constant * total_distance);  // x = 0
-  correspondingVel = A * atan(-tuning_constant * total_remaining);
-
-  return correspondingVel;
-}
-
-void moveToRefPose (double targetX, double targetY, double targetHeading, double linMax, double turnMax, double Kp_lin, double Kp_turn, double Kp_predict, double r)
-{
+void moveToRefPose (double targetX, double targetY, double targetHeading, double linMax, double turnMax, double Kp_lin, double Kp_turn, double Kp_predict, double r) {
   // initialization
   double startingVel = 0;
   double tolerance_end = 0.15;
@@ -69,173 +46,108 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
   bool targetReached = false;
   bool nearEnd = false;
 
-  double Kd_turn = 1;
   double stop_counter = 0;
 
   // looking ahead
-  double prevVel = startingVel;
+  double prevLinError = sqrt(pow((targetX-currentX), 2) + pow((targetY-currentY), 2));
 
-  double prevTurnError = 0;
-  // double total_turnAngle = 90;  // temp
-  // bool nearEnd = false;
-  // bool intermediatePtReached = false; 
-  // double intermediateR = 1;
-  // double tolerance = 0.5;
-  // double intermediateX = 0.75; // targetX - intermediateR*cos(targetHeading *M_PI/180);
-  // double intermediateY = 1; // targetY - intermediateR*sin(targetHeading *M_PI/180);
   Brain.Screen.clearScreen();
 
-  do 
-  {
+  do {
     // get lin error
     double linearError = sqrt(pow((targetX-currentX), 2) + pow((targetY-currentY), 2));
 
     // intermediate direction ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // trying to look ahead
     //                     rpm   /s     cir        ft
-    double maxLinVelFeet = 600 / 60 * M_PI * 2.75 /12;
-    double stepDis = prevVel/100 * maxLinVelFeet * 10/1000 * Kp_predict;  // percentage * maxSpeed
+    // double maxLinVelFeet = 600 / 60 * M_PI * 2.75 /12;
+    double stepDis = (prevLinError - linearError) * Kp_predict;  // percentage * maxSpeed
     double predictedX = currentX + stepDis * cos (currentHeading * M_PI/180);
     double predictedY = currentY + stepDis * sin (currentHeading * M_PI/180);
 
     // get abs target angle
     // double absTargetAngle = atan2 ((targetY-currentY), (targetX-currentX)) *180/M_PI;
     double absTargetAngle = atan2 ((targetY-predictedY), (targetX-predictedX)) *180/M_PI;
-    if (absTargetAngle < 0)
-    {
+    if (absTargetAngle < 0) {
       absTargetAngle += 360;
     }
 
+    // code for intermediate direction
     double D = sqrt(pow((targetX-currentX), 2) + pow((targetY-currentY), 2));
     // double D = sqrt(pow((targetX-predictedX), 2) + pow((targetY-predictedY), 2));
     double alpha = findMinAngle(absTargetAngle, targetHeading);
     double beta = atan(r/D) *180/M_PI;
 
-    if (alpha < 0)
-    {
+    if (alpha < 0) {
       beta = -beta;
     }
 
     // get turn error
     double turnError = 0;
     double errorTerm1 = findMinAngle(absTargetAngle, currentHeading);
-    if (fabs(alpha) < fabs(beta))
-    {
+    if (fabs(alpha) < fabs(beta)) {
       // turnError = findMinAngle(errorTerm1, -alpha)
       turnError = errorTerm1 + alpha;
-    }
-    else
-    {
+    } else {
       // turnError = findMinAngle(errorTerm1, -beta)
       turnError = errorTerm1 + beta;
     }
     // intermediate direction ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // intermidiate point ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // if ((sqrt(pow((currentX-intermediateX), 2) + pow((currentY-intermediateY), 2))) < tolerance)
-    // {
-    //   intermediatePtReached = true;
-    // }
-    // // get abs target angle
-    // double absTargetAngle = 0;
-    // if (intermediatePtReached)
-    // {
-    //   absTargetAngle = atan2 ((targetY-currentY), (targetX-currentX)) *180/M_PI;
-    //   if (absTargetAngle < 0)
-    //   {
-    //     absTargetAngle += 360;
-    //   }
-    // }
-    // else
-    // {
-    //   absTargetAngle = atan2 ((intermediateY-currentY), (intermediateX-currentX)) *180/M_PI;
-    //   if (absTargetAngle < 0)
-    //   {
-    //     absTargetAngle += 360;
-    //   }
-    // }
-    // // get heading error
-    // double turnError = findMinAngle(absTargetAngle, currentHeading);
-    // intermediate point ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
     // keep track of relative angle to target
-    // double botToTargetLineAngle = atan2 ((targetY-predictedY), (targetX-predictedX)) *180/M_PI;
     double botToTargetLineAngle = atan2 ((targetY-currentY), (targetX-currentX)) *180/M_PI;
 
-    if (botToTargetLineAngle < 0)
-    {
+    if (botToTargetLineAngle < 0) {
       botToTargetLineAngle += 360;
     }
 
     // vel calculations
-    startingVel += 1;
+    startingVel += 3;
     double linVel = Kp_lin * linearError * sgn(cos(turnError *M_PI/180));  // in pct
-    // linVel = Kp_lin * linearError * sgn(cos(findMinAngle(targetHeading, botToTargetLineAngle) *M_PI/180)); // this wasnt here
 
-    if (linVel > startingVel)
-    {
+    if (linVel > startingVel) {
       linVel = startingVel;
     }
     
     // where did this shit come from?
     // turnVel = Kp_turn * math.atan(math.tan(turnError *pi/180)) *180/pi  # in pct
-    double turnVel = Kp_turn * turnError + Kd_turn * (turnError - prevTurnError);
-    // turnVel = Kp_turn * atan(tan(turnError *M_PI/180)) *180/M_PI; // this wasnt here
-    // double turnVel = atan_vel_func(total_turnAngle, turnError, turnMax, Kp_turn);
+    double turnVel = Kp_turn * turnError;
 
     // if near end
-    if ((sqrt(pow((currentX-targetX), 2) + pow((currentY-targetY), 2)) < 0.2))
-    {
+    if ((sqrt(pow((currentX-targetX), 2) + pow((currentY-targetY), 2)) < tolerance_end)) {
       nearEnd = true;
     }
 
-    if (nearEnd)
-    {
-      std::cout << "near end" << std::endl;
-
+    if (nearEnd) {
       linVel = Kp_lin * linearError * sgn(cos(findMinAngle(targetHeading, botToTargetLineAngle) *M_PI/180));
-      // linVel = Kp_lin * linearError * sgn(cos(botToTargetLineAngle *M_PI/180));
-
-      // linVel = 5;
 
       turnError = findMinAngle(targetHeading, currentHeading);
       turnVel = Kp_turn * atan(tan(turnError *M_PI/180)) *180/M_PI;
       
-      turnVel = assignMinPower(turnVel, 2);
-      // turnVel = atan_vel_func(total_turnAngle, turnError, turnMax, Kp_turn);
-      // if ((fabs(fabs(findMinAngle(botToTargetLineAngle, targetHeading)) - 90) <= 1) && (fabs(turnError) <= 1))
-      if ((fabs(turnError) <= 1) && nearEnd)
-      {
+      assignMinPower(turnVel, 5);
+
+      if ((fabs(turnError) <= 1) && nearEnd) {
         stop_counter += 1;
-      }
-      else 
-      {
+      } else {
         stop_counter = 0;
       }
 
-      if (stop_counter >= 10)
-      {
-        std::cout << "target reached" << std::endl;
-
+      if (stop_counter >= 10) {
         targetReached = true;
       }
     }
 
     // limit max vel
-    if (linVel > linMax)
-    {
+    if (linVel > linMax) {
       linVel = linMax;
     }
-    if (linVel < -linMax)
-    {
+    if (linVel < -linMax) {
       linVel = -linMax;
     }
-    if (turnVel > turnMax)
-    {
+    if (turnVel > turnMax) {
       turnVel = turnMax;
     }
-    if (turnVel < -turnMax)
-    {
+    if (turnVel < -turnMax) {
       turnVel = -turnMax;
     }
 
@@ -249,10 +161,7 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
     moveWithAssignedSpeed(linVel, turnVel);
 
     // update
-    prevTurnError = turnError;
-    prevVel = linVel;
-
-    std::cout << linVel <<std::endl;
+    prevLinError = linearError;
 
     Brain.Screen.printAt (10, 20, "current x = %1.2f", currentX);
     Brain.Screen.printAt (10, 40, "current Y = %1.2f", currentY);
@@ -261,24 +170,23 @@ void moveToRefPose (double targetX, double targetY, double targetHeading, double
     Brain.Screen.printAt (10, 160, "linVel = %1.2f", linVel);
 
     wait (10, msec);
-  }
-  while (!targetReached);
+  } while (!targetReached);
   
-  groupStopHold();
+  groupStop (hold);
   wait(200, msec);
-  groupStopCoast();
+  groupStop (coast);
 }
 
-void followRefPath (const std::vector<std::vector<double>> &path, double targetAngle, double maxTotalVel, double linMax, double turnMax, double Kp_lin, double Kp_turn, double tune_turn, int numOfSeg)
-{
+void followRefPath (const std::vector<std::vector<double>> &path, double targetAngle, double maxTotalVel, double linMax, double turnMax, double Kp_lin, double Kp_turn, double tune_turn, int numOfSeg) {
+  
+  // initialization
   double robotWidth = 13.5/12; // feet
   int lastFoundIndex = 0;
   double lookAheadDis = 1;
-  double endTol = 0.15;
   bool endNear = false;
   bool targetReached = false;
-  do
-  {
+
+  do {
     bool foundIntersect = false;
     int startIndex = lastFoundIndex;
     double nextToFollow_x = path[lastFoundIndex][0];
